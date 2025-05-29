@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TriMet Breadcrumb + Stop-Event Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link   href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    body,html{margin:0;padding:0;height:100%;font-family:sans-serif}
+    #controls{padding:8px;background:#fafafa;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+    #map{width:100%;height:calc(100% - 58px)}
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Date:
+      <input type="date" id="date" value="{{ today }}">
+    </label>
+    <button id="load">Load</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    mapboxgl.accessToken = "{{ token }}";
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-122.676, 45.523],
+      zoom: 11
+    });
+
+    document.getElementById('load').onclick = async () => {
+      const d = document.getElementById('date').value;
+      if (!d) { alert('Pick a date'); return; }
+
+      const resp = await fetch(`/api/breadcrumb_trip/${d}`);
+      if (!resp.ok) { alert('No data for that date'); return; }
+      const geo = await resp.json();
+
+      if (map.getSource('crumbs')) {
+        map.getSource('crumbs').setData(geo);
+      } else {
+        map.addSource('crumbs', { type:'geojson', data: geo });
+        map.addLayer({
+          id:'crumbs', type:'circle', source:'crumbs',
+          paint:{'circle-radius':4,'circle-color':'#ff0000'}
+        });
+      }
+      if (geo.features.length) {
+        const b = geojsonExtent(geo);    // helper below
+        map.fitBounds(b, {padding:60, duration:0});
+      }
+    };
+
+    /* tiny helper to get [minX,minY,maxX,maxY] from FeatureCollection */
+    function geojsonExtent(fc){
+      let minX=180,minY=90,maxX=-180,maxY=-90;
+      fc.features.forEach(f=>{
+        const [x,y]=f.geometry.coordinates;
+        if(x<minX)minX=x;if(x>maxX)maxX=x;
+        if(y<minY)minY=y;if(y>maxY)maxY=y;
+      });
+      return [[minX,minY],[maxX,maxY]];
+    }
+  </script>
+</body>
+</html>
